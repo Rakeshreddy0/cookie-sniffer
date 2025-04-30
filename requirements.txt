@@ -1,2 +1,8 @@
 requests
 rich
+
+Instalation :
+
+Pip install requests
+
+Pip install rich
