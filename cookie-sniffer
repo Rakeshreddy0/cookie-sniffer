@@ -1,0 +1,177 @@
+import requests
+import json
+import os
+import time
+from http.cookies import SimpleCookie
+from rich.console import Console
+from rich.table import Table
+from rich import box
+
+console = Console()
+
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+
+def print_banner():
+    banner = """[bold green]
+ .d8888b.   .d88888b.   .d88888b.  888    d8P  8888888 8888888888                
+d88P  Y88b d88P" "Y88b d88P" "Y88b 888   d8P     888   888                       
+888    888 888     888 888     888 888  d8P      888   888                       
+888        888     888 888     888 888d88K       888   8888888                   
+888        888     888 888     888 8888888b      888   888                       
+888    888 888     888 888     888 888  Y88b     888   888                       
+Y88b  d88P Y88b. .d88P Y88b. .d88P 888   Y88b    888   888                       
+ "Y8888P"   "Y88888P"   "Y88888P"  888    Y88b 8888888 8888888888                
+                                                                                 
+                                                                                 
+                                                                                 
+       .d8888b.  888b    888 8888888 8888888888 8888888888 8888888888 8888888b.  
+      d88P  Y88b 8888b   888   888   888        888        888        888   Y88b 
+      Y88b.      88888b  888   888   888        888        888        888    888 
+       "Y888b.   888Y88b 888   888   8888888    8888888    8888888    888   d88P 
+          "Y88b. 888 Y88b888   888   888        888        888        8888888P"  
+            "888 888  Y88888   888   888        888        888        888 T88b   
+      Y88b  d88P 888   Y8888   888   888        888        888        888  T88b  
+       "Y8888P"  888    Y888 8888888 888        888        8888888888 888   T88b 
+                                                                                 
+                                                                    
+               [bold blue]🍪 Cookie Sniffer Terminal v1.0[/bold blue]
+[/bold green]"""
+    console.print(banner)
+
+
+def fetch_cookies(url):
+    session = requests.Session()
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/112.0.0.0 Safari/537.36"
+        ),
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;"
+            "q=0.9,image/webp,*/*;q=0.8"
+        ),
+        "Accept-Language": "en-US,en;q=0.5",
+        "Connection": "keep-alive"
+    }
+
+    response = session.get(url, headers=headers, allow_redirects=True)
+
+    cookies = []
+    for cookie in session.cookies:
+        cookies.append({
+            "type": "session",
+            "name": cookie.name,
+            "value": cookie.value,
+            "domain": cookie.domain,
+            "path": cookie.path,
+            "secure": cookie.secure
+        })
+
+    set_cookie_header = response.headers.get("Set-Cookie")
+    if set_cookie_header:
+        raw_cookie = SimpleCookie()
+        raw_cookie.load(set_cookie_header)
+        for key, morsel in raw_cookie.items():
+            cookies.append({
+                "type": "header",
+                "name": key,
+                "value": morsel.value,
+                "domain": "",
+                "path": "",
+                "secure": False
+            })
+
+    return cookies, response.status_code
+
+
+def display_cookies(cookies, url):
+    if not cookies:
+        console.print(f"[bold red]No cookies found on {url}.[/bold red]")
+        return
+
+    table = Table(
+        title=f"🍪 Cookies from [bold blue]{url}[/bold blue]",
+        box=box.SQUARE,
+        expand=True,
+        title_style="bold green",
+        show_lines=True
+    )
+
+    table.add_column("Type", style="cyan", justify="center")
+    table.add_column("Name", style="green", no_wrap=True)
+    table.add_column("Value", style="magenta", overflow="fold")
+    table.add_column("Domain", style="yellow")
+    table.add_column("Path", style="blue", justify="center")
+    table.add_column("Secure", style="red", justify="center")
+
+    for cookie in cookies:
+        value = cookie["value"]
+        display_value = (value[:50] + "...") if len(value) > 50 else value
+
+        table.add_row(
+            cookie["type"],
+            cookie["name"],
+            display_value,
+            cookie.get("domain", ""),
+            cookie.get("path", ""),
+            "✅" if cookie.get("secure", False) else "❌"
+        )
+
+    console.print(table)
+
+
+def save_cookies(cookies, output_file):
+    try:
+        with open(output_file, 'w') as f:
+            json.dump(cookies, f, indent=4)
+        console.print(f"[bold green]✅ Cookies saved to:[/bold green] {output_file}")
+    except Exception as e:
+        console.print(f"[bold red]❌ Error saving cookies:[/bold red] {e}")
+
+
+def main_menu():
+    while True:
+        console.print("\n[bold cyan]Main Menu:[/bold cyan]")
+        console.print("1. 🔍 Sniff cookies from a domain")
+        console.print("2. 💾 Save cookies to a file")
+        console.print("3. ❌ Exit")
+
+        choice = input("Enter your choice (1/2/3): ").strip()
+
+        if choice == "1":
+            domain = input("🌐 Enter domain (e.g. https://example.com): ").strip()
+            console.print(f"\n[bold yellow]Sniffing cookies from:[/bold yellow] {domain}")
+            try:
+                cookies, status = fetch_cookies(domain)
+                if status != 200:
+                    console.print(f"[bold red]❌ Request failed with status code: {status}[/bold red]")
+                else:
+                    display_cookies(cookies, domain)
+            except requests.exceptions.RequestException as e:
+                console.print(f"[bold red]❌ Request error:[/bold red] {e}")
+
+        elif choice == "2":
+            filename = input("💾 Enter filename to save cookies (e.g. cookies.json): ").strip()
+            domain = input("🌐 Enter domain to fetch cookies again: ").strip()
+            cookies, status = fetch_cookies(domain)
+            if status == 200:
+                save_cookies(cookies, filename)
+            else:
+                console.print(f"[bold red]❌ Could not fetch cookies. Status code: {status}[/bold red]")
+
+        elif choice == "3":
+            console.print("\n[bold green]👋 Exiting Cookie Sniffer. Goodbye![/bold green]")
+            time.sleep(1)
+            break
+        else:
+            console.print("[bold red]Invalid choice. Please enter 1, 2, or 3.[/bold red]")
+
+
+if __name__ == "__main__":
+    clear_screen()
+    print_banner()
+    main_menu()
